@@ -5,9 +5,9 @@
 # ==============================================================================
 
 # -----------------------------------------------------------------------------
-# Data: 30 de novembro de 2025
+# Data: 1 de dezembro de 2025
 # Autor: Xerxes Lins (vivaolinux.com.br/~xerxeslins)
-# Versão: 1.0
+# Versão: 2.0
 # Descrição: Script de pós instalação do Fedora Workstation 43+.
 # -----------------------------------------------------------------------------
 
@@ -23,7 +23,7 @@ USUARIO_REAL=${SUDO_USER:-$USER}
 imprimir_cabecalho() {
     clear
     echo -e "${AZUL}==========================================================${SEM_COR}"
-    echo -e "${AZUL}      PÓS-INSTALAÇÃO FEDORA (VERSÃO DNF5 ROBUSTA)         ${SEM_COR}"
+    echo -e "${AZUL}      PÓS-INSTALAÇÃO FEDORA (SCRIPT V4 BLINDADO)          ${SEM_COR}"
     echo -e "${AZUL}==========================================================${SEM_COR}"
     echo -e "Usuário: ${AMARELO}$USUARIO_REAL${SEM_COR}"
     echo ""
@@ -50,41 +50,28 @@ imprimir_cabecalho
 
 # 1. DNF (Limpeza e Otimização)
 if perguntar "Otimizar DNF (Downloads paralelos)?"; then
-    # Limpa linhas antigas para não duplicar
     sed -i '/max_parallel_downloads/d' /etc/dnf/dnf.conf
     sed -i '/defaultyes/d' /etc/dnf/dnf.conf
-    # Adiciona novas
     echo "max_parallel_downloads=10" >> /etc/dnf/dnf.conf
     echo "defaultyes=True" >> /etc/dnf/dnf.conf
     echo -e "${VERDE}DNF Otimizado.${SEM_COR}"
     sleep 1
 fi
 
-# 2. RPM FUSION (Essencial)
+# 2. RPM FUSION
 if perguntar "Habilitar RPM FUSION (Codecs/Drivers)?"; then
     dnf install https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm -y
-    # Instala o grupo core de forma segura
     dnf install @core -y
     echo -e "${VERDE}RPM Fusion OK.${SEM_COR}"
 fi
 
-# 3. CODECS (MÉTODO MANUAL E SEGURO)
-# Aqui estava o erro. Substituímos "group upgrade" por instalação direta dos pacotes.
+# 3. CODECS
 if perguntar "Instalar Codecs Multimídia (FFmpeg, GStreamer)?"; then
     echo "Instalando pacotes de mídia..."
-    
-    # Instala FFmpeg (o mais importante)
     dnf install ffmpeg libavcodec-freeworld -y
-    
-    # Instala plugins do GStreamer (para vídeos no GNOME/Totem)
     dnf install gstreamer1-plugins-bad-free-extras gstreamer1-plugins-bad-freeworld gstreamer1-plugins-ugly gstreamer1-vaapi -y
-    
-    # Tenta o grupo multimídia genérico (se existir), mas ignora erros se falhar
     dnf install @multimedia -y --skip-unavailable
-    
-    # OpenH264 (Geralmente já vem, mas garantimos)
     dnf install gstreamer1-plugin-openh264 mozilla-openh264 -y
-    
     echo -e "${VERDE}Codecs instalados!${SEM_COR}"
 fi
 
@@ -94,24 +81,34 @@ if perguntar "Habilitar Flathub?"; then
     echo -e "${VERDE}Flathub OK.${SEM_COR}"
 fi
 
-# 5. NAVEGADORES
+# 5. NAVEGADORES (MÉTODO REPO MANUAL - À PROVA DE DNF5)
+echo -e "${AZUL}--- NAVEGADORES ---${SEM_COR}"
+
+# Google Chrome (Correção de Chave GPG)
 if perguntar "Instalar Google Chrome?"; then
     dnf install fedora-workstation-repositories -y
-    dnf config-manager --set-enabled google-chrome
+    # Importar chave antes para evitar erro de lock
+    rpm --import https://dl.google.com/linux/linux_signing_key.pub
+    # Habilitar via comando direto no DNF5
+    dnf config-manager setopt google-chrome.enabled=1
     dnf install google-chrome-stable -y
     echo -e "${VERDE}Chrome OK.${SEM_COR}"
 fi
 
+# Microsoft Edge (Correção de Repositório Manual)
 if perguntar "Instalar Microsoft Edge?"; then
     rpm --import https://packages.microsoft.com/keys/microsoft.asc
-    dnf config-manager --add-repo https://packages.microsoft.com/yumrepos/edge
+    # Criar arquivo .repo manualmente (Funciona em qualquer versão do DNF)
+    echo -e "[microsoft-edge]\nname=Microsoft Edge\nbaseurl=https://packages.microsoft.com/yumrepos/edge\nenabled=1\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc" > /etc/yum.repos.d/microsoft-edge.repo
     dnf install microsoft-edge-stable -y
     echo -e "${VERDE}Edge OK.${SEM_COR}"
 fi
 
+# Brave Browser (Correção de Repositório Manual)
 if perguntar "Instalar Brave?"; then
-    dnf config-manager --add-repo https://brave-browser-rpm-release.s3.brave.com/brave-browser.repo
     rpm --import https://brave-browser-rpm-release.s3.brave.com/brave-core.asc
+    # Criar arquivo .repo manualmente
+    echo -e "[brave-browser]\nname=Brave Browser\nbaseurl=https://brave-browser-rpm-release.s3.brave.com/x86_64/\nenabled=1\ngpgcheck=1\ngpgkey=https://brave-browser-rpm-release.s3.brave.com/brave-core.asc" > /etc/yum.repos.d/brave-browser.repo
     dnf install brave-browser -y
     echo -e "${VERDE}Brave OK.${SEM_COR}"
 fi
@@ -126,7 +123,6 @@ if perguntar "Instalar Telegram (Oficial)?"; then
     mv Telegram /opt/
     ln -sf /opt/Telegram/Telegram /usr/bin/telegram
     
-    # Atalho do Menu
     cat > /usr/share/applications/telegram.desktop <<EOF
 [Desktop Entry]
 Name=Telegram Desktop
